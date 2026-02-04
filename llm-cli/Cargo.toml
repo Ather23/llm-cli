@@ -1,0 +1,15 @@
+[package]
+name = "llm-cli"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+tokio = { version = "*", features = ["full"] }
+rig-core = {version="*"}
+anyhow = { version = "*", features = ["std"] }
+futures = "0.3.31"
+async-stream = "*"
+clap = { version = "4.5.56", features = ["derive"] }
+uuid = { version = "1", features = ["v4"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"

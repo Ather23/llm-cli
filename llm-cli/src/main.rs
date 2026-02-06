@@ -1,9 +1,6 @@
 use clap::Parser;
 use futures::StreamExt;
-use std::fs::{self, File};
 use std::io::{self, BufRead, Write};
-use std::path::Path;
-use uuid::Uuid;
 
 mod llm_core;
 mod persistence;
@@ -23,8 +20,9 @@ struct Args {
 async fn main() -> Result<(), anyhow::Error> {
     let args = Args::parse();
 
-    let session_path = create_session_dir()?;
-    let persistence = LocalPersistence::new(&session_path);
+    let mut persistence = LocalPersistence::new(LLM_ROOT_DIR);
+    persistence.create_session().await?;
+
     let mut prompt = args.prompt;
     let mut history = Vec::<ChatMessage>::new();
     let llm = LlmCore::new();
@@ -78,19 +76,4 @@ async fn main() -> Result<(), anyhow::Error> {
     }
 
     Ok(())
-}
-
-fn create_session_dir() -> Result<String, anyhow::Error> {
-    let path = Path::new(LLM_ROOT_DIR);
-    if !path.exists() {
-        fs::create_dir(LLM_ROOT_DIR).expect("Unable to create session");
-    }
-
-    let uuid = Uuid::new_v4();
-    let session_path = format!("{}/{}", LLM_ROOT_DIR, uuid);
-    fs::create_dir(&session_path)?;
-
-    let file_path = format!("{}/chat.json", &session_path);
-    File::create(&file_path)?;
-    Ok(file_path)
 }

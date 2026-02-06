@@ -1,12 +1,13 @@
 use clap::Parser;
 use futures::StreamExt;
 use std::io::{self, BufRead, Write};
-
+mod agent_core;
 mod llm_core;
 mod persistence;
 
-use llm_core::{ChatMessage, Llm, LlmCore, LlmResponse, UserType};
-use persistence::{LocalPersistence, Persistence};
+use agent_core::AgentCore;
+use llm_core::LlmCore;
+use persistence::LocalPersistence;
 
 const LLM_ROOT_DIR: &str = "/home/alif/llm";
 
@@ -20,48 +21,17 @@ struct Args {
 async fn main() -> Result<(), anyhow::Error> {
     let args = Args::parse();
 
-    let mut persistence = LocalPersistence::new(LLM_ROOT_DIR);
-    persistence.create_session().await?;
+    let persistence = LocalPersistence::new(LLM_ROOT_DIR);
+    let mut agent = AgentCore::new(LlmCore::new(), persistence).await;
 
     let mut prompt = args.prompt;
-    let mut history = Vec::<ChatMessage>::new();
-    let llm = LlmCore::new();
 
     loop {
-        let response_text = {
-            let mut stream = llm.generate_response(&history, &prompt);
-            let mut response_text = String::new();
-            while let Some(response) = stream.next().await {
-                match response {
-                    LlmResponse::Text(text) => {
-                        print!("{}", &text);
-                        response_text.push_str(&text);
-                    }
-                }
-            }
-            println!(); // Newline after response
-            response_text
-        };
-
-        // Add to in-memory history
-        history.push(ChatMessage {
-            user_type: UserType::User,
-            message: prompt.clone(),
-        });
-        history.push(ChatMessage {
-            user_type: UserType::Assistant,
-            message: response_text.clone(),
-        });
-
-        // Save to file
-        persistence.store_chat_message(&ChatMessage {
-            user_type: UserType::User,
-            message: prompt.clone(),
-        })?;
-        persistence.store_chat_message(&ChatMessage {
-            user_type: UserType::Assistant,
-            message: response_text.clone(),
-        })?;
+        let mut stream = agent.run(&prompt).await;
+        while let Some(chat_msg) = stream.next().await {
+            print!("{}", chat_msg.message);
+        }
+        println!();
 
         print!("\n> ");
         io::stdout().flush()?;

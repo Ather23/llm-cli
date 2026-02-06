@@ -29,9 +29,9 @@ pub enum LlmResponse {
 }
 
 pub trait Llm {
-    fn generate_response<'a>(
-        &'a self,
-        chat_history: &'a [ChatMessage],
-        prompt: &'a str,
-    ) -> Pin<Box<dyn Stream<Item = LlmResponse> + Send + 'a>>;
+    fn generate_response(
+        &self,
+        chat_history: Vec<ChatMessage>,
+        prompt: String,
+    ) -> Pin<Box<dyn Stream<Item = LlmResponse> + Send>>;
 }

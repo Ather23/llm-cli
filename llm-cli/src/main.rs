@@ -5,8 +5,8 @@ mod agent_core;
 mod llm_core;
 mod persistence;
 
-use agent_core::AgentCore;
-use llm_core::{ChatMessage, LlmCore};
+use agent_core::{AgentCore, AgentMessage};
+use llm_core::LlmCore;
 use persistence::LocalPersistence;
 
 const LLM_ROOT_DIR: &str = "/home/alif/llm";
@@ -30,10 +30,10 @@ async fn main() -> Result<(), anyhow::Error> {
         let mut stream = agent.run(&prompt).await;
         while let Some(chat_msg) = stream.next().await {
             match chat_msg {
-                ChatMessage::UserMessage(text) | ChatMessage::AssistantMessage(text) => {
+                AgentMessage::UserMessage(text) | AgentMessage::AssistantMessage(text) => {
                     print!("{}", text);
                 }
-                ChatMessage::ToolCall(tc) => {
+                AgentMessage::ToolCall(tc) => {
                     print!("[Tool Call: {}]", tc.name);
                 }
             }

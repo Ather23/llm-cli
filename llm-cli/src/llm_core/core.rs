@@ -1,40 +1,35 @@
 use futures::Stream;
 use rig::completion::Message;
-use serde::{Deserialize, Serialize};
 use std::pin::Pin;
 
-#[derive(Serialize, Deserialize, Clone)]
-pub enum ChatMessage {
+#[derive(Clone)]
+pub enum LlmMessage {
     UserMessage(String),
     AssistantMessage(String),
     ToolCall(ToolCall),
 }
 
-impl ChatMessage {
-    pub fn to_rig_message(&self) -> Message {
-        match self {
-            ChatMessage::UserMessage(text) => Message::user(text),
-            ChatMessage::AssistantMessage(text) => Message::assistant(text),
-            ChatMessage::ToolCall(tc) => Message::assistant(format!("[Tool Call: {}]", tc.name)),
-        }
-    }
-}
-
-#[derive(Serialize, Deserialize, Clone)]
+#[derive(Clone)]
 pub struct ToolCall {
     pub id: String,
     pub name: String,
     pub arguments: String,
 }
 
-pub enum LlmResponse {
-    Text(String),
+impl LlmMessage {
+    pub fn to_rig_message(&self) -> Message {
+        match self {
+            LlmMessage::UserMessage(text) => Message::user(text),
+            LlmMessage::AssistantMessage(text) => Message::assistant(text),
+            LlmMessage::ToolCall(tc) => Message::assistant(format!("[Tool Call: {}]", tc.name)),
+        }
+    }
 }
 
 pub trait Llm {
     fn generate_response(
         &self,
-        chat_history: Vec<ChatMessage>,
+        chat_history: Vec<LlmMessage>,
         prompt: String,
-    ) -> Pin<Box<dyn Stream<Item = LlmResponse> + Send>>;
+    ) -> Pin<Box<dyn Stream<Item = LlmMessage> + Send>>;
 }

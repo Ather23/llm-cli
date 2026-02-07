@@ -5,7 +5,7 @@ use rig::providers::anthropic;
 use rig::streaming::{StreamedAssistantContent, StreamingChat};
 use std::pin::Pin;
 
-use crate::llm_core::core::{ChatMessage, Llm, LlmResponse};
+use crate::llm_core::core::{Llm, LlmMessage};
 
 pub struct LlmCore;
 
@@ -18,9 +18,9 @@ impl LlmCore {
 impl Llm for LlmCore {
     fn generate_response(
         &self,
-        chat_history: Vec<ChatMessage>,
+        chat_history: Vec<LlmMessage>,
         prompt: String,
-    ) -> Pin<Box<dyn Stream<Item = LlmResponse> + Send>> {
+    ) -> Pin<Box<dyn Stream<Item = LlmMessage> + Send>> {
         let messages: Vec<_> = chat_history
             .iter()
             .map(|msg| msg.to_rig_message())
@@ -38,7 +38,7 @@ impl Llm for LlmCore {
                 if let Ok(MultiTurnStreamItem::StreamAssistantItem(
                     StreamedAssistantContent::Text(text)
                 )) = item {
-                    yield LlmResponse::Text(text.text);
+                    yield LlmMessage::AssistantMessage(text.text);
                 }
             }
         })

@@ -1,11 +1,10 @@
 use crate::agent_core::session::Session;
-use crate::llm_core::{ChatMessage, Llm, LlmResponse, UserType};
+use crate::llm_core::{ChatMessage, Llm, LlmResponse};
 use crate::persistence::Persistence;
 
 use async_stream::stream;
 use futures::{Stream, StreamExt};
 use std::pin::Pin;
-use uuid::Uuid;
 
 pub struct AgentCore<L: Llm + 'static, P: Persistence + 'static> {
     pub llm: L,
@@ -38,10 +37,7 @@ where
         &mut self,
         user_message: &str,
     ) -> Pin<Box<dyn Stream<Item = ChatMessage> + Send + '_>> {
-        let user_msg = ChatMessage {
-            user_type: UserType::User,
-            message: user_message.to_string(),
-        };
+        let user_msg = ChatMessage::UserMessage(user_message.to_string());
         self.chat_history.push(user_msg.clone());
         let _ = self
             .persistence
@@ -54,16 +50,18 @@ where
             .generate_response(history, user_message.to_string());
 
         Box::pin(stream! {
+            let mut full_response = String::new();
+
             while let Some(response) = stream.next().await {
                 let LlmResponse::Text(text) = response;
-                let assistant_msg = ChatMessage {
-                    user_type: UserType::Assistant,
-                    message: text.clone(),
-                };
-                self.chat_history.push(assistant_msg.clone());
-                let _ = self.persistence.store_chat_message(&assistant_msg, &self.session.id).await;
-                yield assistant_msg;
+                full_response.push_str(&text);
+
+                yield ChatMessage::UserMessage(text);
             }
+
+            let assistant_msg = ChatMessage::AssistantMessage(full_response);
+            self.chat_history.push(assistant_msg.clone());
+            let _ = self.persistence.store_chat_message(&assistant_msg, &self.session.id).await;
         })
     }
 }

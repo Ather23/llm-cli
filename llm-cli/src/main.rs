@@ -5,7 +5,7 @@ mod agent_core;
 mod llm_core;
 mod persistence;
 
-use agent_core::{AgentCore, AgentMessage};
+use agent_core::{AgentCore, AgentEvents, AgentMessage, EventListener};
 use llm_core::LlmCore;
 use persistence::LocalPersistence;
 
@@ -22,7 +22,8 @@ async fn main() -> Result<(), anyhow::Error> {
     let args = Args::parse();
 
     let persistence = LocalPersistence::new(LLM_ROOT_DIR);
-    let mut agent = AgentCore::new(LlmCore::new(), persistence).await;
+    let event_listeners: Vec<Box<dyn EventListener>> = vec![Box::new(AgentEvents)];
+    let mut agent = AgentCore::new(LlmCore::new(), persistence, Vec::new());
 
     let mut prompt = args.prompt;
 

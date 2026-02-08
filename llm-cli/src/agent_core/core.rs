@@ -3,6 +3,7 @@ use crate::llm_core::{Llm, LlmMessage};
 use crate::persistence::Persistence;
 
 use async_stream::stream;
+use async_trait::async_trait;
 use futures::{Stream, StreamExt};
 use serde::{Deserialize, Serialize};
 use std::pin::Pin;
@@ -15,7 +16,7 @@ pub enum AgentMessage {
     ToolCall(ToolCall),
 }
 
-#[derive(Serialize, Deserialize, Clone)]
+#[derive(Serialize, Deserialize, Clone, Debug)]
 #[serde(rename_all = "camelCase")]
 pub struct ToolCall {
     pub id: String,
@@ -53,26 +54,50 @@ impl From<crate::llm_core::ToolCall> for ToolCall {
     }
 }
 
+#[async_trait]
+pub trait EventListener: Send + Sync {
+    async fn on_stream_start(&self);
+    async fn on_user_message(&self, text: &str);
+    async fn on_assistant_message(&self, text: &str);
+    async fn on_tool_call(&self, tool_call: &ToolCall);
+    async fn on_stream_end(&self);
+}
+
+pub struct AgentEvents;
+
+#[async_trait]
+impl EventListener for AgentEvents {
+    async fn on_stream_start(&self) {
+        println!("stream started");
+    }
+
+    async fn on_user_message(&self, _text: &str) {
+        // Stub: Handle user message
+        println!(">> user message received: {}", _text);
+    }
+
+    async fn on_assistant_message(&self, _text: &str) {
+        // Stub: Handle assistant message
+        println!("### assistant message received: {}", _text);
+    }
+
+    async fn on_tool_call(&self, _tool_call: &ToolCall) {
+        // Stub: Handle tool call
+        println!("xxx tool call received: {:?}", &_tool_call);
+    }
+
+    async fn on_stream_end(&self) {
+        // Stub: Handle stream end
+        println!("stream ended");
+    }
+}
+
 pub struct AgentCore<L: Llm + 'static, P: Persistence + 'static> {
     pub llm: L,
     pub persistence: P,
     pub session: Session,
+    pub event_listeners: Vec<Box<dyn EventListener>>,
     pub chat_history: Vec<AgentMessage>,
-}
-
-impl<L, P> AgentCore<L, P>
-where
-    L: Llm,
-    P: Persistence,
-{
-    pub async fn new(llm: L, persistence: P) -> Self {
-        AgentCore {
-            llm,
-            persistence,
-            session: Session::new(),
-            chat_history: Vec::new(),
-        }
-    }
 }
 
 impl<L, P> AgentCore<L, P>
@@ -80,10 +105,28 @@ where
     L: Llm + Send,
     P: Persistence + Send,
 {
+    pub fn new(llm: L, persistence: P, event_listeners: Vec<Box<dyn EventListener>>) -> Self {
+        AgentCore {
+            llm,
+            persistence,
+            session: Session::new(),
+            chat_history: Vec::new(),
+            event_listeners,
+        }
+    }
+
     pub async fn run(
         &mut self,
         user_message: &str,
     ) -> Pin<Box<dyn Stream<Item = AgentMessage> + Send + '_>> {
+        for listener in &self.event_listeners {
+            listener.on_stream_start().await;
+        }
+
+        for listener in &self.event_listeners {
+            listener.on_user_message(user_message).await;
+        }
+
         let user_msg = AgentMessage::UserMessage(user_message.to_string());
         self.chat_history.push(user_msg.clone());
         let _ = self
@@ -103,10 +146,20 @@ where
                 match response {
                     LlmMessage::AssistantMessage(text) => {
                         full_response.push_str(&text);
+
+                        for listener in &self.event_listeners {
+                            listener.on_assistant_message(&text).await;
+                        }
+
                         yield AgentMessage::AssistantMessage(text);
                     }
                     LlmMessage::ToolCall(tc) => {
                         let tool_call: ToolCall = tc.into();
+
+                        for listener in &self.event_listeners {
+                            listener.on_tool_call(&tool_call).await;
+                        }
+
                         self.chat_history.push(AgentMessage::ToolCall(tool_call.clone()));
                         let _ = self.persistence.store_chat_message(
                             &AgentMessage::ToolCall(tool_call.clone()),
@@ -124,6 +177,10 @@ where
                 let assistant_msg = AgentMessage::AssistantMessage(full_response);
                 self.chat_history.push(assistant_msg.clone());
                 let _ = self.persistence.store_chat_message(&assistant_msg, &self.session.id).await;
+            }
+
+            for listener in &self.event_listeners {
+                listener.on_stream_end().await;
             }
         })
     }

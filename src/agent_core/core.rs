@@ -105,12 +105,15 @@ where
     L: Llm + Send,
     P: Persistence + Send,
 {
-    pub fn new(llm: L, persistence: P, event_listeners: Vec<Box<dyn EventListener>>) -> Self {
+    pub async fn new(llm: L, persistence: P, event_listeners: Vec<Box<dyn EventListener>>) -> Self {
+        let session = Session::new();
+        let chat_history = persistence.load_context().await.unwrap();
+
         AgentCore {
             llm,
             persistence,
-            session: Session::new(),
-            chat_history: Vec::new(),
+            session,
+            chat_history: chat_history,
             event_listeners,
         }
     }

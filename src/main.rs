@@ -9,21 +9,27 @@ use agent_core::{AgentCore, AgentEvents, AgentMessage, EventListener};
 use llm_core::LlmCore;
 use persistence::LocalPersistence;
 
+use crate::agent_core::Session;
+
 const LLM_ROOT_DIR: &str = "/home/alif/llm";
 
 #[derive(Parser, Debug)]
 struct Args {
-    #[arg(short, long)]
+    #[arg(short = 'p', long)]
     prompt: String,
+
+    #[arg(short = 'g', long, default_value_t = true)]
+    use_global_context: bool,
 }
 
 #[tokio::main]
 async fn main() -> Result<(), anyhow::Error> {
     let args = Args::parse();
 
-    let persistence = LocalPersistence::new(LLM_ROOT_DIR);
+    let session = Session::new();
+    let persistence = LocalPersistence::new(LLM_ROOT_DIR, &session.id, args.use_global_context);
     let event_listeners: Vec<Box<dyn EventListener>> = vec![Box::new(AgentEvents)];
-    let mut agent = AgentCore::new(LlmCore::new(), persistence, Vec::new());
+    let mut agent = AgentCore::new(LlmCore::new(), persistence, Vec::new()).await;
 
     let mut prompt = args.prompt;
 
